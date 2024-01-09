@@ -6,8 +6,11 @@ What started as a simple PDF merge function for a law office has blossomed into 
 
 # Features
 **Merge and Download:** Combine multiple PDF files into a single, downloadable document.
+
 **Extract and Download:** Pick specific pages or a range of pages to extract and download.
+
 **Switch Pages:** Swap the positions of two pages in a PDF and get the modified document.
+
 **Move Page:** Easily move a page to a different position within the PDF.
 
 # How to Use
@@ -27,7 +30,7 @@ Got cool ideas? Found a bug? We welcome contributions and feedback! Open an issu
 Julian Kim 
 jkswimtkd@gmail.com
 
-Acknowledgments
+# Acknowledgments
 A big shoutout to Law Offices of Hyung Seok Kim for inspiring and contributing to the development of this PDF toolkit.
 
 Enjoy working with your PDFs! 🎉
