@@ -316,7 +316,7 @@ async function extractPages(files, pagesArray, deleteExtracted) {
     } 
 }
 
-let externalPdfDoc; // Declare externalPdfDoc at a global level
+let externalPdfDoc; 
 
 async function loadExternalPdf() {
   if (!externalPdfDoc && selectedFiles.length > 0) {
@@ -384,6 +384,8 @@ async function switchPages() {
   // Download the modified PDF
   const modifiedPdf = await pdfDoc.save();
   downloadPdf(modifiedPdf, 'switched_pages_' + pageIndex1 + '_and_' + pageIndex2 + '.pdf');
+
+  externalPdfDoc = null 
 }
 
 async function movePage() {
@@ -412,6 +414,8 @@ async function movePage() {
     // Download the modified PDF
     const modifiedPdf = await pdfDoc.save();
     downloadPdf(modifiedPdf, 'moved_page_' + sourcePage + '_to_' + destinationPage + '.pdf');
+
+    externalPdfDoc = null 
   }
 
 </script>
