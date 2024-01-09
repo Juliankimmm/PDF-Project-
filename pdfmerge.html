@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+  <style>
+    #dropbox {
+      border: 2px dashed #ccc;
+      padding: 100px;
+      text-align: center;
+      cursor: pointer;
+    }
+    #selected-files {
+      margin-top: 20px;
+    }
+    #custom-dialog {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+      z-index: 1000;
+    }
+    #custom-dialog p {
+      margin: 0;
+    }
+    #custom-dialog button {
+      margin-top: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div id="dropbox" onclick="selectFiles()" ondrop="dropHandler(event)" ondragover="dragOverHandler(event)">
+  <p>Click or drag PDF files here to select</p>
+</div>
+
+<div id="selected-files">
+  <p>Selected Files:</p>
+  <ul id="file-list"></ul>
+</div>
+
+<button onclick="mergeAndDownload()">Merge and Download</button>
+<button onclick="extractAndDownload()">Extract and Download</button>
+<button onclick="switchPages()">Switch Pages</button>
+<button onclick="movePage()">Move Page</button>
+<button onclick="removeAllSelectedFiles()">Remove All Selected Files</button>
+
+<div id="download-link-container">
+  <a id="download-link" style="display: none;" download="merged.pdf">Download Merged PDF</a>
+</div>
+<div id="extract-link-container">
+  <a id="extract-link" style="display: none;" download="extracted.pdf">Download Extracted PDF</a>
+</div>
+
+<div id="custom-dialog">
+  <p>Do you want to delete the extracted pages from the original PDF?</p>
+  <button onclick="handleYes()">Yes</button>
+  <button onclick="handleNo()">No</button>
+</div>
+
+
+
+<script>
+  let selectedFiles = [];
+
+  function selectFiles() {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf';
+    fileInput.multiple = true;
+    fileInput.addEventListener('change', handleFileSelect);
+    fileInput.click();
+  }
+
+  function removeAllSelectedFiles() {
+    selectedFiles = [];
+    updateFileList();
+  }
+
+  function handleFileSelect(event) {
+    const files = event.target.files;
+    for (const file of files) {
+      if (!selectedFiles.includes(file)) {
+        selectedFiles.push({ file, selected: true });
+        updateFileList();
+      }
+    }
+  }
+
+  function dragOverHandler(event) {
+    event.preventDefault();
+  }
+
+  function dropHandler(event) {
+    event.preventDefault();
+    const files = event.dataTransfer.files;
+    for (const file of files) {
+      if (!selectedFiles.includes(file)) {
+        selectedFiles.push({ file, selected: true });
+        updateFileList();
+      }
+    }
+  }
+
+  function updateFileList() {
+    const fileListElement = document.getElementById('file-list');
+    fileListElement.innerHTML = '';
+    selectedFiles.forEach((fileObj, index) => {
+      const listItem = document.createElement('li');
+      listItem.innerHTML = `<span style="cursor: pointer;" onclick="toggleFile(${index})">${fileObj.file.name}</span> <span style="cursor: pointer;" onclick="removeFile(${index})">(Remove)</span>`;
+      fileListElement.appendChild(listItem);
+    });
+  }
+
+  function toggleFile(index) {
+    selectedFiles[index].selected = !selectedFiles[index].selected;
+    updateFileList();
+  }
+
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFileList();
+  }
+
+  async function mergeAndDownload() {
+    const selectedFilesToMerge = selectedFiles.filter(fileObj => fileObj.selected);
+    if (selectedFilesToMerge.length < 2) {
+        alert("Please select at least two files to merge.");
+        return;
+    }
+
+    const mergedPdf = await mergePDFs(selectedFilesToMerge.map(fileObj => fileObj.file));
+    const blob = new Blob([mergedPdf], { type: 'application/pdf' });
+
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+        // For Internet Explorer
+        window.navigator.msSaveOrOpenBlob(blob, 'merged.pdf');
+    } else {
+        // For other browsers
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'merged.pdf';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        // Clean up
+        window.URL.revokeObjectURL(url);
+    }
+    try {
+        const mergedPdf = await mergePDFs(selectedFilesToMerge.map(fileObj => fileObj.file));
+        console.log("Merging successful");
+        // ... (rest of the code)
+    } catch (error) {
+        console.error("Error while merging:", error);
+    }
+    }
+
+  async function mergePDFs(files) {
+    const pdfDoc = await PDFLib.PDFDocument.create();
+
+    for (const file of files) {
+      const fileArrayBuffer = await readFileAsArrayBuffer(file);
+      const externalPdfDoc = await PDFLib.PDFDocument.load(fileArrayBuffer);
+      const copiedPages = await pdfDoc.copyPages(externalPdfDoc, externalPdfDoc.getPageIndices());
+      copiedPages.forEach((page) => pdfDoc.addPage(page));
+    }
+
+    return await pdfDoc.save();
+  }
+
+  function readFileAsArrayBuffer(file) {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error("Invalid file object provided"));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target.result);
+    reader.onerror = (error) => reject(error);
+
+    // Ensure that the argument is a Blob or File before reading
+    if (file instanceof Blob) {
+      reader.readAsArrayBuffer(file);
+    } else if (file instanceof File) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reject(new Error("Invalid file object provided"));
+    }
+  });
+}
+
+function customConfirm(message, yesCallback, noCallback) {
+    const dialog = document.getElementById('custom-dialog');
+    dialog.style.display = 'block';
+
+    const messageElement = dialog.querySelector('p');
+    messageElement.textContent = message;
+
+    window.handleYes = () => {
+      dialog.style.display = 'none';
+      yesCallback();
+    };
+
+    window.handleNo = () => {
+      dialog.style.display = 'none';
+      noCallback();
+    };
+  }
+
+async function extractAndDownload() {
+  const selectedFilesToExtract = selectedFiles.filter(fileObj => fileObj.selected);
+  if (selectedFilesToExtract.length === 0) {
+    alert("Please select at least one file to extract pages.");
+    return;
+  }
+
+  const pagesToExtract = prompt("Enter the page numbers or range to extract (e.g., 1, 3, 5-7)");
+  if (!pagesToExtract) return; // User canceled
+
+  const pagesArray = parsePagesInput(pagesToExtract);
+
+  customConfirm(
+    "Do you want to delete the selected page(s)?",
+    async () => {
+      try {
+        const extractedPdf = await extractPages(selectedFilesToExtract.map(fileObj => fileObj.file), pagesArray, true);
+        downloadPdf(extractedPdf, 'remaining.pdf');
+      } catch (error) {
+        console.error('Error during extraction and download:', error);
+        alert('An error occurred during extraction and download. Please check the console for details.');
+      }
+    },
+    async () => {
+      try {
+        const extractedPdf = await extractPages(selectedFilesToExtract.map(fileObj => fileObj.file), pagesArray, false);
+        downloadPdf(extractedPdf, 'extracted.pdf');
+      } catch (error) {
+        console.error('Error during extraction and download:', error);
+        alert('An error occurred during extraction and download. Please check the console for details.');
+      }
+    }
+  );
+}
+
+function parsePagesInput(input) {
+  const pages = [];
+  const ranges = input.split(',');
+
+  ranges.forEach(range => {
+    const parts = range.split('-');
+    const start = parseInt(parts[0].trim(), 10);
+    const end = parts.length > 1 ? parseInt(parts[1].trim(), 10) : start;
+
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+  });
+
+  return pages;
+}
+
+async function proceedWithExtraction(files, pagesArray, deleteExtracted) {
+  try {
+    const extractedPdf = await extractPages(files, pagesArray, deleteExtracted);
+    return extractedPdf;
+  } catch (error) {
+    console.error('Error during extraction:', error);
+    throw new Error('An error occurred during extraction. Please check the console for details.');
+  }
+}
+
+async function extractPages(files, pagesArray, deleteExtracted) {
+  const pdfDoc = await PDFLib.PDFDocument.create();
+  let externalPdfDoc;
+
+  for (const file of files) {
+    const fileArrayBuffer = await readFileAsArrayBuffer(file);
+    externalPdfDoc = await PDFLib.PDFDocument.load(fileArrayBuffer);
+
+    // Extract selected pages
+    const extractedPages = await pdfDoc.copyPages(externalPdfDoc, pagesArray.map(page => page - 1));
+
+    // Add extracted pages to the new PDF
+    extractedPages.forEach((page) => pdfDoc.addPage(page));
+
+    // Optionally, remove specified extracted pages from the original PDF
+    if (deleteExtracted) {
+      const originalPageCount = externalPdfDoc.getPageCount();
+
+      // Build an array of indices to remove, considering the original page count
+      const pagesToDeleteIndices = pagesArray.filter(page => page <= originalPageCount);
+
+      for (let i = originalPageCount - 1; i >= 0; i--) {
+        if (pagesToDeleteIndices.includes(i + 1)) {
+          externalPdfDoc.removePage(i);
+        }
+      }
+    }
+  }
+    // Return the appropriate PDF
+    if (deleteExtracted) {
+      return await externalPdfDoc.save(); // Remaining PDF after deletion
+    } else {
+      return await pdfDoc.save(); // Extracted pages PDF
+    } 
+}
+
+let externalPdfDoc; // Declare externalPdfDoc at a global level
+
+async function loadExternalPdf() {
+  if (!externalPdfDoc && selectedFiles.length > 0) {
+    const fileArrayBuffer = await readFileAsArrayBuffer(selectedFiles[0].file);
+    externalPdfDoc = await PDFLib.PDFDocument.load(fileArrayBuffer);
+    return externalPdfDoc;
+  } else {
+    throw new Error("No PDF file selected.");
+  }
+}
+
+function checkPageExistence(pdfDoc, pageIndex) {
+  return pageIndex > 0 && pageIndex <= pdfDoc.getPageCount();
+}
+
+function downloadPdf(pdfData, filename) {
+  const blob = new Blob([pdfData], { type: 'application/pdf' });
+
+  if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+    // For Internet Explorer
+    window.navigator.msSaveOrOpenBlob(blob, filename);
+  } else {
+    // For other browsers
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Clean up
+    window.URL.revokeObjectURL(url);
+  }
+}
+
+async function switchPages() {
+  const pdfDoc = await loadExternalPdf();
+
+  // Ensure the PDF has at least two pages
+  if (pdfDoc.getPageCount() < 2) {
+    alert("The PDF must have at least two pages to switch.");
+    return;
+  }
+
+  let pageIndex1 = prompt("Enter the index of the first page to switch (1-" + pdfDoc.getPageCount() + "):");
+  let pageIndex2 = prompt("Enter the index of the second page to switch (1-" + pdfDoc.getPageCount() + "):");
+
+  // Check if the entered page indices are valid
+  if (!checkPageExistence(pdfDoc, pageIndex1) || !checkPageExistence(pdfDoc, pageIndex2)) {
+    alert("Invalid page indices. Please enter valid page indices.");
+    return;
+  }
+
+  // Switch pages by swapping their positions
+  const tempPage1 = pdfDoc.getPage(pageIndex1 - 1);
+  const tempPage2 = pdfDoc.getPage(pageIndex2 - 1);
+
+  pdfDoc.removePage(pageIndex1 - 1);
+  pdfDoc.insertPage(pageIndex1 - 1, tempPage2);
+
+  pdfDoc.removePage(pageIndex2 - 1);
+  pdfDoc.insertPage(pageIndex2 - 1, tempPage1);
+
+  // Download the modified PDF
+  const modifiedPdf = await pdfDoc.save();
+  downloadPdf(modifiedPdf, 'switched_pages_' + pageIndex1 + '_and_' + pageIndex2 + '.pdf');
+}
+
+async function movePage() {
+    const pdfDoc = await loadExternalPdf();
+
+    // Ensure the PDF has at least two pages
+    if (pdfDoc.getPageCount() < 2) {
+      alert("The PDF must have at least two pages to move a page.");
+      return;
+    }
+
+    let sourcePage = prompt("Enter the page number to move:");
+    let destinationPage = prompt("Enter the destination page number:");
+
+    // Check if the entered page indices are valid
+    if (!checkPageExistence(pdfDoc, sourcePage) || !checkPageExistence(pdfDoc, destinationPage)) {
+      alert("Invalid page indices. Please enter valid page indices.");
+      return;
+    }
+
+    // Move the source page to the destination position
+    const tempPage = pdfDoc.getPage(sourcePage - 1);
+    pdfDoc.removePage(sourcePage - 1);
+    pdfDoc.insertPage(destinationPage - 1, tempPage);
+
+    // Download the modified PDF
+    const modifiedPdf = await pdfDoc.save();
+    downloadPdf(modifiedPdf, 'moved_page_' + sourcePage + '_to_' + destinationPage + '.pdf');
+  }
+
+</script>
+
+</body>
+</html>
